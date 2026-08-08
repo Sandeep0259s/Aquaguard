@@ -15,7 +15,7 @@ const Leaderboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const q = query(collection(db, 'leaderboard'), orderBy('score', 'asc'), limit(50));
+    const q = query(collection(db, 'leaderboard'), orderBy('score', 'desc'), limit(50));
     const unsubscribe = onSnapshot(q, snapshot => {
       setEntries(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
     });
@@ -27,9 +27,9 @@ const Leaderboard = () => {
       <Navbar active="leaderboard" user={user} />
       <div style={styles.contentArea}>
         <div style={styles.contentContainer}>
-          <h2 style={styles.pageTitle}>🏆 Water Footprint Leaderboard</h2>
+          <h2 style={styles.pageTitle}>🏆 Water Knowledge Leaderboard</h2>
           <p style={styles.subtitle}>
-            Ranked by estimated daily water footprint from the quiz — lowest wins.
+            Ranked by total correct answers on the water trivia quiz — highest wins.
           </p>
 
           {entries.length === 0 ? (
@@ -37,7 +37,7 @@ const Leaderboard = () => {
               <FiDroplet size={32} style={styles.emptyIcon} />
               <p style={styles.emptyText}>No scores yet — be the first on the board.</p>
               <button style={styles.ctaButton} className="lift-hover" onClick={() => navigate('/quiz')}>
-                Take the footprint quiz
+                Take the quiz
               </button>
             </div>
           ) : (
@@ -52,7 +52,8 @@ const Leaderboard = () => {
                 >
                   <span style={styles.rank}>{MEDALS[i] || `#${i + 1}`}</span>
                   <span style={styles.name}>{entry.name || 'Anonymous'}</span>
-                  <span style={styles.score}>{entry.score} gal/day</span>
+                  {entry.difficulty && <span style={styles.difficultyTag}>{entry.difficulty}</span>}
+                  <span style={styles.score}>{entry.score} correct</span>
                 </div>
               ))}
             </div>
@@ -74,6 +75,7 @@ const styles = {
   rowSelf: { backgroundColor: theme.colors.accentPale },
   rank: { width: '36px', fontSize: '1.1rem', fontWeight: '700', color: theme.colors.textMuted, flexShrink: 0 },
   name: { flex: 1, fontWeight: '600', color: theme.colors.textDark },
+  difficultyTag: { fontSize: '0.75rem', fontWeight: '700', color: theme.colors.primary, backgroundColor: theme.colors.accentPale, padding: '3px 9px', borderRadius: '999px', textTransform: 'uppercase', letterSpacing: '0.02em' },
   score: { fontWeight: '700', color: theme.colors.primaryDark },
   emptyCard: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, boxShadow: theme.shadow.card, padding: '48px 24px', textAlign: 'center' },
   emptyIcon: { color: theme.colors.primary, marginBottom: '12px' },

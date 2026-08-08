@@ -52,11 +52,12 @@ regional water-scarcity data rather than the current curated dataset.
   saved per-user in Firestore (ChatGPT-style history sidebar, "New Chat", delete),
   so nothing is lost when you navigate to another page, and the UI still works
   immediately even if the background save hasn't completed yet.
-- **Water Footprint Quiz** — a short interactive quiz about daily habits (showers,
-  laundry, dishes, leaks, lawn watering, diet) that estimates your daily water
-  footprint in gallons, compares it to the US average, and gives targeted
-  improvement tips based specifically on your highest-impact answers. Optionally
-  save your score to the leaderboard.
+- **Water Knowledge Quiz** — AI-generated trivia (via Gemini) about water pollution,
+  conservation, and the water situation in different countries/regions — not a
+  fixed question bank, a fresh 5-question set every session. Difficulty rises as
+  you complete more sessions (easy → medium → hard → expert), each answer is
+  followed by an explanation, and progress/scores are saved per-user in Firestore.
+  Optionally save your score to the leaderboard.
 - **Leak & Waste Cost Calculator** — an interactive calculator that turns a
   household leak or habit into gallons wasted per day/year and an annual dollar
   cost, with relatable comparisons (swimming pools, showers) so the number means
@@ -64,8 +65,13 @@ regional water-scarcity data rather than the current curated dataset.
 - **Global Water Scarcity Dashboard** — renewable water resources per capita and
   water-stress levels across ten countries, with a log-scale comparison chart and
   per-region facts, to give personal conservation a global frame of reference.
-- **Leaderboard** — ranks users by quiz footprint score (lowest wins), turning a
-  one-off self-assessment into an ongoing, shared incentive.
+- **Water Tips widget** — a small floating card (visible on every page) showing a
+  fresh, AI-generated conservation tip that rotates automatically; tips aren't a
+  fixed static list — each refresh pulls a new batch from Gemini. Users can also
+  browse tips on demand by category (bathroom, kitchen, laundry, outdoor, leaks,
+  appliances, community, pollution).
+- **Leaderboard** — ranks users by total correct quiz answers (highest wins),
+  turning the quiz into an ongoing, shared incentive rather than a one-off.
 - **Authentication** — email/password (with forgot-password reset) and Google
   sign-in via Firebase Auth, with a single shared auth session (no re-check
   flicker or redirect when navigating between pages).
@@ -168,13 +174,17 @@ REACT_APP_API_BASE_URL=http://localhost:5000
 ```
 
 In Firestore, add security rules so each user can only read/write their own chat
-history, and the leaderboard is publicly readable but only self-writable:
+history and quiz progress, and the leaderboard is publicly readable but only
+self-writable:
 
 ```
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId}/conversations/{conversationId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /quizProgress/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     match /leaderboard/{userId} {

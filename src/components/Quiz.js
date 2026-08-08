@@ -1,118 +1,133 @@
-import { useState } from 'react';
-import { FiDroplet, FiArrowRight, FiArrowLeft, FiAward, FiRefreshCw } from 'react-icons/fi';
+import { useState, useEffect, useCallback } from 'react';
+import {
+  FiDroplet, FiCheck, FiX, FiArrowRight, FiAward, FiRefreshCw, FiAlertTriangle,
+} from 'react-icons/fi';
 import { db } from '../config/firebase';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import Navbar from './Navbar';
 import theme from '../theme';
 import { useAuth } from '../context/AuthContext';
 
-const NATIONAL_AVG_GAL_PER_DAY = 82;
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
+const DIFFICULTY_TIERS = ['easy', 'medium', 'hard', 'expert'];
+const DIFFICULTY_LABELS = { easy: 'Easy', medium: 'Medium', hard: 'Hard', expert: 'Expert' };
+// Every 2 completed sessions bumps you up a tier, capping at "expert".
+const SESSIONS_PER_TIER = 2;
 
-const QUESTIONS = [
-  {
-    id: 'shower',
-    question: 'How long are your showers, typically?',
-    options: [
-      { label: 'Under 5 minutes', value: 10 },
-      { label: '5–10 minutes', value: 20, tip: 'Cutting showers to under 5 minutes can save ~10 gal/day.' },
-      { label: '10–15 minutes', value: 35, tip: 'A shower timer or low-flow showerhead can cut this significantly.' },
-      { label: '15+ minutes', value: 50, tip: 'Long showers are one of the biggest indoor water uses — try the 5-minute challenge.' },
-    ],
-  },
-  {
-    id: 'laundry',
-    question: 'How many loads of laundry does your household run per week?',
-    options: [
-      { label: '0–2 loads', value: 5 },
-      { label: '3–5 loads', value: 10 },
-      { label: '6–8 loads', value: 15, tip: 'Always run full loads — half-empty loads waste water per garment washed.' },
-      { label: '9+ loads', value: 20, tip: 'Consider a high-efficiency washer; it can use 30% less water per load.' },
-    ],
-  },
-  {
-    id: 'dishes',
-    question: 'How do you usually wash dishes?',
-    options: [
-      { label: 'Full dishwasher loads only', value: 4 },
-      { label: 'Dishwasher, not always full', value: 8, tip: 'Wait for a full load before running the dishwasher.' },
-      { label: 'Hand-wash with tap running', value: 14, tip: 'Hand-washing with the tap running uses far more water than an efficient dishwasher — try filling a basin instead.' },
-    ],
-  },
-  {
-    id: 'leaks',
-    question: 'Any leaky faucets or running toilets at home?',
-    options: [
-      { label: 'No, everything is checked and fine', value: 0 },
-      { label: 'A minor drip somewhere', value: 10, tip: 'A single dripping faucet can waste 3,000+ gallons a year — worth a $5 washer fix.' },
-      { label: 'A noticeable leak or running toilet', value: 25, tip: 'A running toilet can waste 200 gallons a day — this is the highest-impact fix on this list.' },
-      { label: "Haven't checked recently", value: 15, tip: 'Try the food-coloring toilet test — add a few drops to the tank and watch if it bleeds into the bowl without flushing.' },
-    ],
-  },
-  {
-    id: 'lawn',
-    question: 'How often do you water a lawn or garden?',
-    options: [
-      { label: "Never / don't have one", value: 0 },
-      { label: '1–2 times a week', value: 10 },
-      { label: '3–4 times a week', value: 20, tip: 'Deep, infrequent watering (1-2x/week) grows stronger roots and uses less water than frequent shallow watering.' },
-      { label: 'Daily', value: 35, tip: 'Switch to drip irrigation and water at dawn/dusk to cut evaporation losses drastically.' },
-    ],
-  },
-  {
-    id: 'diet',
-    question: "What's closest to your typical diet?",
-    options: [
-      { label: 'Mostly plant-based', value: 20 },
-      { label: 'Balanced / mixed', value: 40 },
-      { label: 'Meat-heavy, most meals', value: 60, tip: 'Meat has a much higher "virtual water" footprint than plants — even one or two meat-free days a week adds up.' },
-    ],
-  },
-];
-
-const getCategory = (gallons) => {
-  if (gallons < 60) return { label: 'Water Saver', color: '#2a9d8f' };
-  if (gallons <= 100) return { label: 'Average User', color: theme.colors.primary };
-  return { label: 'Heavy User', color: theme.colors.danger };
-};
+const difficultyForSessions = (sessionsCompleted) =>
+  DIFFICULTY_TIERS[Math.min(Math.floor(sessionsCompleted / SESSIONS_PER_TIER), DIFFICULTY_TIERS.length - 1)];
 
 const Quiz = () => {
   const { user } = useAuth();
-  const [step, setStep] = useState(0);
-  const [answers, setAnswers] = useState({});
-  const [done, setDone] = useState(false);
+  const [progress, setProgress] = useState(null); // { sessionsCompleted, totalCorrect, totalAnswered }
+  const [phase, setPhase] = useState('loading'); // loading | active | summary | error
+  const [questions, setQuestions] = useState([]);
+  const [index, setIndex] = useState(0);
+  const [selected, setSelected] = useState(null);
+  const [results, setResults] = useState([]); // booleans, one per answered question
+  const [error, setError] = useState('');
+  const [saveError, setSaveError] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const question = QUESTIONS[step];
-  const selectedValue = answers[question?.id];
+  const loadProgress = useCallback(async () => {
+    if (!user) return { sessionsCompleted: 0, totalCorrect: 0, totalAnswered: 0 };
+    try {
+      const snap = await getDoc(doc(db, 'quizProgress', user.uid));
+      if (snap.exists()) return snap.data();
+    } catch (err) {
+      console.error('Failed to load quiz progress (check Firestore rules):', err);
+      setSaveError(true);
+    }
+    return { sessionsCompleted: 0, totalCorrect: 0, totalAnswered: 0 };
+  }, [user]);
 
-  const handleSelect = (option) => {
-    setAnswers(prev => ({ ...prev, [question.id]: option }));
+  const startSession = useCallback(async (currentProgress) => {
+    setPhase('loading');
+    setError('');
+    setIndex(0);
+    setSelected(null);
+    setResults([]);
+    const difficulty = difficultyForSessions(currentProgress.sessionsCompleted);
+    try {
+      const res = await fetch(`${API_BASE_URL}/quiz-session`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ difficulty }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.questions || !data.questions.length) {
+        throw new Error(data.error || 'Could not load quiz questions.');
+      }
+      setQuestions(data.questions);
+      setPhase('active');
+    } catch (err) {
+      setError(err.message || 'Could not load quiz questions. Please try again.');
+      setPhase('error');
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const p = await loadProgress();
+      if (cancelled) return;
+      setProgress(p);
+      startSession(p);
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const currentQuestion = questions[index];
+  const currentDifficulty = progress ? difficultyForSessions(progress.sessionsCompleted) : 'easy';
+
+  const handleSelect = (optionIndex) => {
+    if (selected !== null) return;
+    setSelected(optionIndex);
+    setResults(prev => [...prev, optionIndex === currentQuestion.correctIndex]);
   };
 
-  const handleNext = () => {
-    if (step < QUESTIONS.length - 1) setStep(step + 1);
-    else setDone(true);
+  const handleNext = async () => {
+    if (index < questions.length - 1) {
+      setIndex(index + 1);
+      setSelected(null);
+      return;
+    }
+
+    // Session finished — persist progress. `results` already includes the
+    // last answer (appended synchronously in handleSelect).
+    const totalSessionCorrect = results.filter(Boolean).length;
+    const updated = {
+      sessionsCompleted: (progress?.sessionsCompleted || 0) + 1,
+      totalCorrect: (progress?.totalCorrect || 0) + totalSessionCorrect,
+      totalAnswered: (progress?.totalAnswered || 0) + questions.length,
+    };
+    setProgress(updated);
+    setPhase('summary');
+
+    if (user) {
+      try {
+        await setDoc(doc(db, 'quizProgress', user.uid), { ...updated, updatedAt: serverTimestamp() });
+        setSaveError(false);
+      } catch (err) {
+        console.error('Failed to save quiz progress (check Firestore rules):', err);
+        setSaveError(true);
+      }
+    }
   };
 
-  const handleBack = () => setStep(Math.max(0, step - 1));
-
-  const handleRestart = () => {
-    setStep(0);
-    setAnswers({});
-    setDone(false);
+  const handlePlayAgain = () => {
     setSaved(false);
+    startSession(progress);
   };
-
-  const totalGallons = Object.values(answers).reduce((sum, opt) => sum + (opt?.value || 0), 0);
-  const category = getCategory(totalGallons);
-  const improvementTips = Object.values(answers).filter(opt => opt?.tip).map(opt => opt.tip);
 
   const handleSaveToLeaderboard = async () => {
-    if (!user) return;
+    if (!user || !progress) return;
     try {
       await setDoc(doc(db, 'leaderboard', user.uid), {
         name: user.displayName || (user.email ? user.email.split('@')[0] : 'Anonymous'),
-        score: totalGallons,
+        score: progress.totalCorrect,
+        difficulty: DIFFICULTY_LABELS[currentDifficulty],
         updatedAt: serverTimestamp(),
       }, { merge: true });
       setSaved(true);
@@ -121,79 +136,109 @@ const Quiz = () => {
     }
   };
 
+  const sessionCorrectCount = results.filter(Boolean).length;
+
   return (
     <div style={styles.container}>
       <Navbar active="quiz" user={user} />
       <div style={styles.contentArea}>
         <div style={styles.contentContainer}>
-          {!done ? (
+          {phase === 'loading' && (
             <div style={styles.card}>
+              <FiDroplet size={32} className="pulse" style={styles.loadingIcon} />
+              <p style={styles.loadingText}>Generating fresh questions…</p>
+            </div>
+          )}
+
+          {phase === 'error' && (
+            <div style={styles.card}>
+              <FiAlertTriangle size={28} style={styles.errorIcon} />
+              <p style={styles.loadingText}>{error}</p>
+              <button style={styles.navButtonPrimary} className="lift-hover" onClick={() => startSession(progress)}>
+                <FiRefreshCw size={16} /> Try again
+              </button>
+            </div>
+          )}
+
+          {phase === 'active' && currentQuestion && (
+            <div style={styles.card}>
+              <div style={styles.topRow}>
+                <span style={styles.difficultyBadge}>{DIFFICULTY_LABELS[currentDifficulty]}</span>
+                <p style={styles.stepLabel}>Question {index + 1} of {questions.length}</p>
+              </div>
               <div style={styles.progressTrack}>
-                <div style={{ ...styles.progressFill, width: `${((step + 1) / QUESTIONS.length) * 100}%` }} />
+                <div style={{ ...styles.progressFill, width: `${((index + 1) / questions.length) * 100}%` }} />
               </div>
-              <p style={styles.stepLabel}>Question {step + 1} of {QUESTIONS.length}</p>
-              <h2 style={styles.question}>{question.question}</h2>
+              <h2 style={styles.question}>{currentQuestion.question}</h2>
               <div style={styles.options}>
-                {question.options.map(opt => (
-                  <button
-                    key={opt.label}
-                    onClick={() => handleSelect(opt)}
-                    style={{
-                      ...styles.option,
-                      ...(selectedValue?.label === opt.label ? styles.optionSelected : {}),
-                    }}
-                    className="lift-hover"
-                  >
-                    {opt.label}
-                  </button>
-                ))}
+                {currentQuestion.options.map((opt, i) => {
+                  const isCorrect = i === currentQuestion.correctIndex;
+                  const isChosen = i === selected;
+                  let optionStyle = styles.option;
+                  if (selected !== null) {
+                    if (isCorrect) optionStyle = { ...styles.option, ...styles.optionCorrect };
+                    else if (isChosen) optionStyle = { ...styles.option, ...styles.optionWrong };
+                  }
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => handleSelect(i)}
+                      style={optionStyle}
+                      disabled={selected !== null}
+                      className={selected === null ? 'lift-hover' : undefined}
+                    >
+                      <span>{opt}</span>
+                      {selected !== null && isCorrect && <FiCheck size={18} />}
+                      {selected !== null && isChosen && !isCorrect && <FiX size={18} />}
+                    </button>
+                  );
+                })}
               </div>
+
+              {selected !== null && (
+                <div style={styles.explanationBox}>
+                  <strong>{selected === currentQuestion.correctIndex ? 'Correct! ' : 'Not quite. '}</strong>
+                  {currentQuestion.explanation}
+                </div>
+              )}
+
               <div style={styles.navRow}>
                 <button
-                  onClick={handleBack}
-                  disabled={step === 0}
-                  style={{ ...styles.navButton, ...(step === 0 ? styles.navButtonDisabled : {}) }}
-                >
-                  <FiArrowLeft size={16} /> Back
-                </button>
-                <button
                   onClick={handleNext}
-                  disabled={!selectedValue}
-                  style={{ ...styles.navButtonPrimary, ...(!selectedValue ? styles.navButtonDisabled : {}) }}
+                  disabled={selected === null}
+                  style={{ ...styles.navButtonPrimary, ...(selected === null ? styles.navButtonDisabled : {}) }}
                   className="lift-hover"
                 >
-                  {step === QUESTIONS.length - 1 ? 'See my results' : 'Next'} <FiArrowRight size={16} />
+                  {index === questions.length - 1 ? 'See results' : 'Next'} <FiArrowRight size={16} />
                 </button>
               </div>
             </div>
-          ) : (
+          )}
+
+          {phase === 'summary' && (
             <div style={styles.card}>
-              <div style={{ ...styles.resultBadge, backgroundColor: category.color }}>
-                <FiDroplet size={32} color={theme.colors.white} />
+              <div style={styles.resultBadge}>
+                <FiAward size={32} color={theme.colors.white} />
               </div>
-              <h2 style={{ ...styles.resultTitle, color: category.color }}>{category.label}</h2>
-              <p style={styles.resultScore}>
-                ~<strong>{totalGallons}</strong> gallons/day estimated footprint
+              <h2 style={styles.resultTitle}>{sessionCorrectCount} / {questions.length} correct</h2>
+              <p style={styles.resultSub}>
+                Difficulty: {DIFFICULTY_LABELS[currentDifficulty]} · Lifetime score: {progress?.totalCorrect ?? 0} correct
+                across {progress?.sessionsCompleted ?? 0} sessions
               </p>
-              <p style={styles.resultCompare}>
-                US average is {NATIONAL_AVG_GAL_PER_DAY} gal/day — you're{' '}
-                {totalGallons > NATIONAL_AVG_GAL_PER_DAY
-                  ? `${Math.round(((totalGallons - NATIONAL_AVG_GAL_PER_DAY) / NATIONAL_AVG_GAL_PER_DAY) * 100)}% above it`
-                  : `${Math.round(((NATIONAL_AVG_GAL_PER_DAY - totalGallons) / NATIONAL_AVG_GAL_PER_DAY) * 100)}% below it`}
+              <p style={styles.resultHint}>
+                Next session unlocks at{' '}
+                {DIFFICULTY_LABELS[difficultyForSessions(progress?.sessionsCompleted ?? 0)]} difficulty.
               </p>
 
-              {improvementTips.length > 0 && (
-                <div style={styles.tipsBox}>
-                  <h3 style={styles.tipsTitle}>Where you can save the most:</h3>
-                  <ul style={styles.tipsList}>
-                    {improvementTips.map((tip, i) => <li key={i} style={styles.tipItem}>{tip}</li>)}
-                  </ul>
+              {saveError && (
+                <div style={styles.saveErrorBanner}>
+                  <FiAlertTriangle size={14} /> Your progress isn't saving — check your Firestore security rules.
                 </div>
               )}
 
               <div style={styles.resultActions}>
-                <button onClick={handleRestart} style={styles.navButton} className="lift-hover">
-                  <FiRefreshCw size={16} /> Retake quiz
+                <button onClick={handlePlayAgain} style={styles.navButton} className="lift-hover">
+                  <FiRefreshCw size={16} /> Play again
                 </button>
                 <button
                   onClick={handleSaveToLeaderboard}
@@ -201,7 +246,7 @@ const Quiz = () => {
                   style={{ ...styles.navButtonPrimary, ...(saved ? styles.navButtonDisabled : {}) }}
                   className="lift-hover"
                 >
-                  <FiAward size={16} /> {saved ? 'Saved to leaderboard' : 'Add to leaderboard'}
+                  <FiAward size={16} /> {saved ? 'Saved to leaderboard' : 'Save to leaderboard'}
                 </button>
               </div>
             </div>
@@ -217,25 +262,29 @@ const styles = {
   contentArea: { flex: 1, padding: '32px 24px', overflowY: 'auto', display: 'flex', justifyContent: 'center' },
   contentContainer: { width: '100%', maxWidth: '640px' },
   card: { backgroundColor: theme.colors.white, borderRadius: theme.radius.xl, padding: '36px', boxShadow: theme.shadow.glass },
+  loadingIcon: { color: theme.colors.primary, display: 'block', margin: '0 auto 16px' },
+  loadingText: { textAlign: 'center', color: theme.colors.textMuted },
+  errorIcon: { color: theme.colors.danger, display: 'block', margin: '0 auto 16px' },
+  topRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
+  difficultyBadge: { backgroundColor: theme.colors.accentPale, color: theme.colors.primaryDark, fontSize: '0.75rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.03em', padding: '4px 10px', borderRadius: '999px' },
   progressTrack: { height: '6px', backgroundColor: theme.colors.accentPale, borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' },
   progressFill: { height: '100%', background: theme.gradient.button, transition: 'width 0.3s ease' },
-  stepLabel: { margin: '0 0 6px', fontSize: '0.85rem', color: theme.colors.textFaint, fontWeight: '600', textTransform: 'uppercase', letterSpacing: '0.03em' },
+  stepLabel: { margin: 0, fontSize: '0.85rem', color: theme.colors.textFaint, fontWeight: '600' },
   question: { fontFamily: theme.fontHeading, fontSize: '1.4rem', fontWeight: '700', color: theme.colors.textDark, margin: '0 0 24px' },
-  options: { display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '28px' },
-  option: { textAlign: 'left', padding: '14px 18px', borderRadius: theme.radius.md, border: `2px solid ${theme.colors.border}`, backgroundColor: theme.colors.white, cursor: 'pointer', fontSize: '0.98rem', color: theme.colors.textDark },
-  optionSelected: { borderColor: theme.colors.primary, backgroundColor: theme.colors.accentPale, fontWeight: '600' },
-  navRow: { display: 'flex', justifyContent: 'space-between' },
+  options: { display: 'flex', flexDirection: 'column', gap: '10px', marginBottom: '20px' },
+  option: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', textAlign: 'left', padding: '14px 18px', borderRadius: theme.radius.md, border: `2px solid ${theme.colors.border}`, backgroundColor: theme.colors.white, cursor: 'pointer', fontSize: '0.98rem', color: theme.colors.textDark },
+  optionCorrect: { borderColor: '#2a9d8f', backgroundColor: '#e6f7f4', fontWeight: '600', color: '#177267' },
+  optionWrong: { borderColor: theme.colors.danger, backgroundColor: '#fee2e2', fontWeight: '600', color: '#b91c1c' },
+  explanationBox: { backgroundColor: theme.colors.bgTint, borderRadius: theme.radius.md, padding: '14px 16px', fontSize: '0.92rem', color: theme.colors.textDark, lineHeight: 1.5, marginBottom: '20px' },
+  navRow: { display: 'flex', justifyContent: 'flex-end' },
   navButton: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 18px', borderRadius: theme.radius.md, border: `1px solid ${theme.colors.border}`, backgroundColor: theme.colors.white, color: theme.colors.textMuted, cursor: 'pointer', fontWeight: '600' },
-  navButtonPrimary: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: theme.radius.md, border: 'none', background: theme.gradient.button, color: theme.colors.white, cursor: 'pointer', fontWeight: '600' },
+  navButtonPrimary: { display: 'flex', alignItems: 'center', gap: '6px', padding: '10px 20px', borderRadius: theme.radius.md, border: 'none', background: theme.gradient.button, color: theme.colors.white, cursor: 'pointer', fontWeight: '600', margin: '0 auto' },
   navButtonDisabled: { opacity: 0.45, cursor: 'not-allowed' },
-  resultBadge: { width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' },
-  resultTitle: { textAlign: 'center', fontFamily: theme.fontHeading, fontSize: '1.6rem', fontWeight: '700', margin: '0 0 8px' },
-  resultScore: { textAlign: 'center', fontSize: '1.05rem', color: theme.colors.textDark, margin: '0 0 4px' },
-  resultCompare: { textAlign: 'center', fontSize: '0.9rem', color: theme.colors.textFaint, margin: '0 0 24px' },
-  tipsBox: { backgroundColor: theme.colors.bgTint, borderRadius: theme.radius.md, padding: '18px 20px', marginBottom: '24px' },
-  tipsTitle: { margin: '0 0 10px', fontSize: '0.95rem', fontWeight: '700', color: theme.colors.primaryDark },
-  tipsList: { margin: 0, paddingLeft: '20px', display: 'flex', flexDirection: 'column', gap: '8px' },
-  tipItem: { fontSize: '0.92rem', color: theme.colors.textDark, lineHeight: 1.5 },
+  resultBadge: { width: '64px', height: '64px', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px', background: theme.gradient.button },
+  resultTitle: { textAlign: 'center', fontFamily: theme.fontHeading, fontSize: '1.6rem', fontWeight: '700', margin: '0 0 8px', color: theme.colors.textDark },
+  resultSub: { textAlign: 'center', fontSize: '0.92rem', color: theme.colors.textMuted, margin: '0 0 4px' },
+  resultHint: { textAlign: 'center', fontSize: '0.85rem', color: theme.colors.textFaint, margin: '0 0 20px' },
+  saveErrorBanner: { display: 'flex', alignItems: 'center', gap: '8px', justifyContent: 'center', padding: '8px 14px', marginBottom: '16px', backgroundColor: '#fff3e0', color: '#9a5b00', borderRadius: theme.radius.sm, fontSize: '0.82rem' },
   resultActions: { display: 'flex', justifyContent: 'center', gap: '12px', flexWrap: 'wrap' },
 };
 

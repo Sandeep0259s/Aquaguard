@@ -6,11 +6,15 @@ import Dashboard from './components/Dashboard';
 import Calculator from './components/Calculator';
 import Leaderboard from './components/Leaderboard';
 import RequireAuth from './components/RequireAuth';
+import TipWidget from './components/TipWidget';
 import { AuthProvider } from './context/AuthContext';
 
 function App() {
   return (
     <AuthProvider>
+      {/* Mounted once here (not inside each page) so it doesn't re-fetch on
+          every navigation and burn the shared Gemini API quota. */}
+      <TipWidget />
       <Router>
         <Routes>
           <Route path="/" element={<Auth />} />

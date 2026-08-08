@@ -1,3 +1,4 @@
+import json
 import os
 import traceback
 
@@ -58,9 +59,126 @@ else:
           "and add your key, or the /chat endpoint will return an error.")
 
 
+def _parse_json_response(text):
+    """Gemini's JSON mode is reliable but occasionally still wraps output in
+    markdown fences — strip those before parsing."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = text.split("```")[1]
+        if text.lower().startswith("json"):
+            text = text[4:]
+        text = text.strip()
+    return json.loads(text)
+
+
+QUIZ_DIFFICULTY_GUIDANCE = {
+    "easy": "well-known, basic facts a beginner would know",
+    "medium": "more specific facts: numbers, causes of pollution, and regional situations",
+    "hard": "detailed global water-crisis statistics, conservation technologies, and virtual water concepts",
+    "expert": "nuanced, lesser-known facts: water policy, cross-country comparisons, and technical processes",
+}
+
+TIP_CATEGORIES = [
+    "Bathroom", "Kitchen", "Laundry", "Outdoor & Gardening",
+    "Leaks & Plumbing", "Appliances & Technology", "Community & Policy", "Water Pollution",
+]
+
+
 @app.route('/', methods=['GET'])
 def health_check():
     return jsonify({"status": "ok", "chat_ready": model is not None})
+
+
+@app.route('/quiz-session', methods=['POST'])
+def quiz_session():
+    if model is None:
+        return jsonify({"error": "Quiz generator is not configured: GEMINI_API_KEY is missing on the server."}), 503
+
+    data = request.json or {}
+    difficulty = data.get("difficulty", "easy")
+    guidance = QUIZ_DIFFICULTY_GUIDANCE.get(difficulty, QUIZ_DIFFICULTY_GUIDANCE["easy"])
+
+    prompt = (
+        "Generate 5 multiple-choice trivia questions about water: water pollution, water "
+        "conservation, water scarcity, and the water situation in different countries/regions "
+        f"around the world. Difficulty level: {difficulty} — {guidance}. Cover a mix of these "
+        "topics across the 5 questions; don't repeat the same fact twice within the set. "
+        "Respond with ONLY a JSON array (no markdown fences, no extra text) in exactly this shape: "
+        '[{"question": "...", "options": ["...", "...", "...", "..."], "correctIndex": 0, '
+        '"explanation": "one sentence explaining the correct answer"}]'
+    )
+
+    try:
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                max_output_tokens=2048,
+                temperature=0.9,
+            ),
+        )
+        questions = _parse_json_response(response.text)
+        if not isinstance(questions, list) or not questions:
+            raise ValueError("Model did not return a question list")
+        return jsonify({"questions": questions, "difficulty": difficulty})
+
+    except ResourceExhausted:
+        return jsonify({
+            "error": "The AI is getting rate-limited (free-tier Gemini quota). Wait about a minute and try again."
+        }), 429
+
+    except Exception:
+        print("Error in /quiz-session:")
+        traceback.print_exc()
+        return jsonify({"error": "Could not generate quiz questions right now. Please try again."}), 500
+
+
+@app.route('/tips', methods=['GET'])
+def tips():
+    if model is None:
+        return jsonify({"error": "Tip generator is not configured: GEMINI_API_KEY is missing on the server."}), 503
+
+    category = request.args.get("category", "").strip()
+    topic = (
+        f'specifically about "{category}"' if category
+        else "covering a mix of categories (bathroom, kitchen, laundry, outdoor, leaks, "
+             "appliances, community, pollution)"
+    )
+
+    prompt = (
+        f"Generate 8 concise, practical water conservation tips, {topic}. Each tip should be one "
+        "short sentence, specific and actionable, not generic filler. Respond with ONLY a JSON "
+        'array of 8 strings (no markdown fences, no extra text): ["tip 1", "tip 2", ...]'
+    )
+
+    try:
+        response = model.generate_content(
+            prompt,
+            generation_config=genai.types.GenerationConfig(
+                response_mime_type="application/json",
+                max_output_tokens=1024,
+                temperature=1.0,
+            ),
+        )
+        tip_list = _parse_json_response(response.text)
+        if not isinstance(tip_list, list) or not tip_list:
+            raise ValueError("Model did not return a tip list")
+        return jsonify({"tips": tip_list, "category": category or "General"})
+
+    except ResourceExhausted:
+        return jsonify({
+            "error": "The AI is getting rate-limited (free-tier Gemini quota). Wait about a minute and try again."
+        }), 429
+
+    except Exception:
+        print("Error in /tips:")
+        traceback.print_exc()
+        return jsonify({"error": "Could not generate tips right now. Please try again."}), 500
+
+
+@app.route('/tip-categories', methods=['GET'])
+def tip_categories():
+    return jsonify({"categories": TIP_CATEGORIES})
 
 
 @app.route('/chat', methods=['POST'])
