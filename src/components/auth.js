@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FiDroplet } from "react-icons/fi";
 import { auth, googleProvider } from "../config/firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
+import theme from "../theme";
 
 export const Auth = () => {
     const [email, setEmail] = useState("");
@@ -57,20 +59,36 @@ export const Auth = () => {
         }
     };
 
-    // Inline CSS styles
+    // Inline CSS styles (shared ocean palette — matches Chat/Tips/Usage)
     const styles = {
         container: {
             minHeight: "100vh",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            background: "linear-gradient(135deg, #f0f4ff 0%, #f9f0ff 100%)"
+            fontFamily: theme.fontFamily,
+            background: `linear-gradient(135deg, ${theme.colors.bgTint} 0%, ${theme.colors.accentPale} 100%)`
+        },
+        brand: {
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "0.5rem",
+            marginBottom: "1.5rem"
+        },
+        brandIcon: {
+            color: theme.colors.primary
+        },
+        brandText: {
+            fontSize: "1.5rem",
+            fontWeight: "700",
+            color: theme.colors.primary
         },
         authBox: {
-            backgroundColor: "white",
+            backgroundColor: theme.colors.white,
             padding: "2rem",
-            borderRadius: "0.5rem",
-            boxShadow: "0 10px 25px rgba(0, 0, 0, 0.1)",
+            borderRadius: theme.radius.lg,
+            boxShadow: theme.shadow.panel,
             width: "100%",
             maxWidth: "28rem"
         },
@@ -78,7 +96,7 @@ export const Auth = () => {
             fontSize: "1.875rem",
             fontWeight: "bold",
             textAlign: "center",
-            color: "#1f2937",
+            color: theme.colors.textDark,
             marginBottom: "1.5rem"
         },
         errorMessage: {
@@ -106,24 +124,25 @@ export const Auth = () => {
             display: "block",
             fontSize: "0.875rem",
             fontWeight: "500",
-            color: "#374151",
+            color: theme.colors.textMuted,
             marginBottom: "0.25rem"
         },
         input: {
             width: "100%",
             padding: "0.5rem 1rem",
-            border: "1px solid #d1d5db",
+            border: `1px solid ${theme.colors.border}`,
             borderRadius: "0.375rem",
             outline: "none"
         },
         primaryButton: {
             width: "100%",
-            backgroundColor: "#2563eb",
-            color: "white",
+            backgroundColor: theme.colors.primary,
+            color: theme.colors.white,
             padding: "0.5rem 1rem",
             borderRadius: "0.375rem",
             border: "none",
             cursor: "pointer",
+            fontWeight: "600",
             transition: "background-color 0.2s"
         },
         googleButton: {
@@ -132,9 +151,9 @@ export const Auth = () => {
             alignItems: "center",
             justifyContent: "center",
             gap: "0.5rem",
-            backgroundColor: "white",
-            border: "1px solid #d1d5db",
-            color: "#374151",
+            backgroundColor: theme.colors.white,
+            border: `1px solid ${theme.colors.border}`,
+            color: theme.colors.textMuted,
             padding: "0.5rem 1rem",
             borderRadius: "0.375rem",
             cursor: "pointer",
@@ -143,11 +162,11 @@ export const Auth = () => {
         toggleText: {
             textAlign: "center",
             fontSize: "0.875rem",
-            color: "#4b5563",
+            color: theme.colors.textMuted,
             marginTop: "1rem"
         },
         toggleButton: {
-            color: "#2563eb",
+            color: theme.colors.primary,
             fontWeight: "500",
             border: "none",
             backgroundColor: "transparent",
@@ -157,7 +176,7 @@ export const Auth = () => {
             width: "100%",
             marginTop: "1rem",
             fontSize: "0.875rem",
-            color: "#4b5563",
+            color: theme.colors.textMuted,
             border: "none",
             backgroundColor: "transparent",
             cursor: "pointer"
@@ -167,10 +186,14 @@ export const Auth = () => {
     return (
         <div style={styles.container}>
             <div style={styles.authBox}>
+                <div style={styles.brand}>
+                    <FiDroplet size={28} style={styles.brandIcon} />
+                    <span style={styles.brandText}>AquaGuard</span>
+                </div>
                 <h1 style={styles.title}>
                     {isLogin ? "Welcome Back" : "Create Account"}
                 </h1>
-                
+
                 {error && (
                     <div style={styles.errorMessage}>
                         {error}
@@ -215,8 +238,8 @@ export const Auth = () => {
                     <button
                         onClick={handleAuth}
                         style={styles.primaryButton}
-                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = "#1d4ed8"}
-                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = "#2563eb"}
+                        onMouseOver={(e) => e.currentTarget.style.backgroundColor = theme.colors.primaryDark}
+                        onMouseOut={(e) => e.currentTarget.style.backgroundColor = theme.colors.primary}
                     >
                         {isLogin ? "Sign In" : "Sign Up"}
                     </button>
@@ -240,8 +263,8 @@ export const Auth = () => {
                         <button
                             onClick={signout}
                             style={styles.signOutButton}
-                            onMouseOver={(e) => e.currentTarget.style.color = "#1f2937"}
-                            onMouseOut={(e) => e.currentTarget.style.color = "#4b5563"}
+                            onMouseOver={(e) => e.currentTarget.style.color = theme.colors.textDark}
+                            onMouseOut={(e) => e.currentTarget.style.color = theme.colors.textMuted}
                         >
                             Sign Out
                         </button>
@@ -251,8 +274,8 @@ export const Auth = () => {
                             <button
                                 onClick={() => setIsLogin(!isLogin)}
                                 style={styles.toggleButton}
-                                onMouseOver={(e) => e.currentTarget.style.color = "#1e40af"}
-                                onMouseOut={(e) => e.currentTarget.style.color = "#2563eb"}
+                                onMouseOver={(e) => e.currentTarget.style.color = theme.colors.primaryDark}
+                                onMouseOut={(e) => e.currentTarget.style.color = theme.colors.primary}
                             >
                                 {isLogin ? "Sign up" : "Sign in"}
                             </button>

@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  FiSend, FiDroplet, FiHome, FiClock, FiTrash2,
-  FiUser, FiChevronDown, FiLogOut
-} from 'react-icons/fi';
+import { FiSend, FiTrash2 } from 'react-icons/fi';
 import waterAnimation from './water-animation.mp4';
 import { auth } from '../config/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import './chat.css';
+import { onAuthStateChanged } from 'firebase/auth';
+import Navbar from './Navbar';
+import theme from '../theme';
+
+const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:5000';
 
 const Chat = () => {
   const [messages, setMessages] = useState([
@@ -18,11 +18,9 @@ const Chat = () => {
   ]);
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
   const [user, setUser] = useState(null);
 
   const messagesEndRef = useRef(null);
-  const profileRef = useRef(null);
   const navigate = useNavigate();
 
   const quickActions = [
@@ -38,7 +36,7 @@ const Chat = () => {
       if (currentUser) {
         setUser(currentUser);
       } else {
-        navigate('/login');
+        navigate('/');
       }
     });
 
@@ -49,18 +47,6 @@ const Chat = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (profileRef.current && !profileRef.current.contains(event.target)) {
-        setShowProfileDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, []);
-
   const handleSendMessage = async (message) => {
     if (!message.trim()) return;
 
@@ -69,7 +55,7 @@ const Chat = () => {
     setIsLoading(true);
 
     try {
-      const response = await fetch('http://localhost:5000/chat', {
+      const response = await fetch(`${API_BASE_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message })
@@ -109,16 +95,6 @@ const Chat = () => {
     ]);
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-      setShowProfileDropdown(false);
-      navigate('/');
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
   return (
     <div style={styles.container}>
       <div style={styles.waterAnimation}>
@@ -127,58 +103,7 @@ const Chat = () => {
         </video>
       </div>
 
-      <div style={styles.navBar}>
-        <div style={styles.logoContainer}>
-          <FiDroplet size={28} style={styles.logoIcon} />
-          <h1 style={styles.logoText}>AquaGuard</h1>
-        </div>
-
-        <div style={styles.navTabs}>
-          <button className="nav-tab" onClick={() => navigate('/chat')}>
-            <FiHome size={18} /> Chat
-          </button>
-
-          <button className="nav-tab" onClick={() => navigate('/tips')}>
-            <FiClock size={18} /> Tips
-          </button>
-        </div>
-
-        <div style={styles.profileContainer} ref={profileRef}>
-          <button
-            style={styles.profileButton}
-            onClick={() => setShowProfileDropdown(!showProfileDropdown)}
-            aria-haspopup="true"
-            aria-expanded={showProfileDropdown}
-          >
-            <div style={styles.profileIcon}><FiUser size={20} /></div>
-            <span style={styles.profileName}>{user?.displayName || user?.email || 'User'}</span>
-            <FiChevronDown
-              size={16}
-              style={{
-                transform: showProfileDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.2s ease'
-              }}
-            />
-          </button>
-
-          {showProfileDropdown && (
-            <div style={styles.dropdownMenu} role="menu">
-              <div style={styles.dropdownHeader}>
-                <div style={styles.dropdownIcon}><FiUser size={18} /></div>
-                <span style={styles.dropdownName}>{user?.displayName || user?.email || 'User'}</span>
-              </div>
-              <button
-                style={styles.dropdownSignOut}
-                onClick={handleSignOut}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#d62828'}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#e63946'}
-              >
-                <FiLogOut size={16} style={{ marginRight: '8px' }} /> Sign Out
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <Navbar active="chat" user={user} />
 
       {/* Chat UI */}
       <div style={styles.chatArea}>
@@ -245,10 +170,10 @@ const styles = {
     position: 'relative',
     height: '100vh',
     overflow: 'hidden',
-    fontFamily: "'Segoe UI', Roboto, sans-serif",
+    fontFamily: theme.fontFamily,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: '#f5f7fa',
+    backgroundColor: theme.colors.bgTint,
   },
   waterAnimation: {
     position: 'fixed',
@@ -264,129 +189,6 @@ const styles = {
     width: '100%',
     height: '100%',
     objectFit: 'cover',
-  },
-  navBar: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '0 24px',
-    height: '72px',
-    backgroundColor: '#0077b6',
-    color: '#fff',
-    boxShadow: '0 2px 15px rgba(0, 0, 0, 0.1)',
-    zIndex: 10,
-    position: 'relative',
-  },
-  logoContainer: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    cursor: 'pointer',
-  },
-  logoIcon: {
-    color: '#ffffff',
-    flexShrink: 0,
-  },
-  logoText: {
-    fontSize: '1.5rem',
-    fontWeight: '600',
-    margin: 0,
-    color: '#ffffff',
-  },
-  navTabs: {
-    display: 'flex',
-    justifyContent: 'center',
-    gap: '8px',
-    flex: 1,
-    maxWidth: '500px',
-  },
-  profileContainer: {
-    position: 'relative',
-  },
-  profileButton: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    background: 'rgba(255, 255, 255, 0.2)',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '8px 16px',
-    cursor: 'pointer',
-    color: '#fff',
-    fontWeight: '500',
-    fontSize: '0.95rem',
-  },
-  profileIcon: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  profileName: {
-    fontWeight: '500',
-    fontSize: '0.95rem',
-    whiteSpace: 'nowrap',
-    maxWidth: '130px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  dropdownMenu: {
-    position: 'absolute',
-    right: 0,
-    top: 'calc(100% + 8px)',
-    width: '220px',
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
-    color: '#333',
-    padding: '12px',
-    zIndex: 20,
-    display: 'flex',
-    flexDirection: 'column',
-  },
-  dropdownHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    marginBottom: '12px',
-  },
-  dropdownIcon: {
-    color: '#0077b6',
-  },
-  dropdownName: {
-    fontWeight: '600',
-    fontSize: '1rem',
-    flexGrow: 1,
-    whiteSpace: 'nowrap',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-  },
-  dropdownSignOut: {
-    backgroundColor: '#e63946',
-    color: '#fff',
-    border: 'none',
-    borderRadius: '8px',
-    padding: '10px',
-    fontWeight: '600',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: '6px',
-    transition: 'background-color 0.2s ease',
-  },
-  navTab: {
-    background: 'transparent',
-    border: 'none',
-    color: '#fff',
-    fontSize: '1rem',
-    fontWeight: '500',
-    cursor: 'pointer',
-    padding: '8px 12px',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    borderRadius: '8px',
-    transition: 'background-color 0.2s ease',
   },
   chatArea: {
     flex: 1,
@@ -404,8 +206,8 @@ const styles = {
     flexDirection: 'column',
     height: '100%',
     backgroundColor: 'rgba(255, 255, 255, 0.8)',
-    borderRadius: '12px',
-    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.1)',
+    borderRadius: theme.radius.md,
+    boxShadow: theme.shadow.panel,
     overflow: 'hidden',
   },
   messagesContainer: {
@@ -424,16 +226,16 @@ const styles = {
     maxWidth: '70%',
     padding: '12px 16px',
     borderRadius: '18px',
-    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.9)',
+    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.09)',
     lineHeight: 1.4,
   },
   userMessage: {
-    backgroundColor: '#caf0f8',
+    backgroundColor: theme.colors.accentPale,
     alignSelf: 'flex-end',
     borderBottomRightRadius: '4px',
   },
   aiMessage: {
-    backgroundColor: '#90e0ef',
+    backgroundColor: theme.colors.accentLight,
     alignSelf: 'flex-start',
     borderBottomLeftRadius: '4px',
   },
@@ -441,16 +243,16 @@ const styles = {
     fontWeight: '700',
     marginBottom: '6px',
     fontSize: '0.9rem',
-    color: '#023e8a',
+    color: theme.colors.primaryDark,
   },
   messageText: {
     whiteSpace: 'pre-wrap',
     fontSize: '1rem',
   },
   quickActions: {
-    backgroundColor: 'skyblue',
+    backgroundColor: theme.colors.accentPale,
     padding: '14px',
-    borderRadius: '12px',
+    borderRadius: theme.radius.md,
     margin: '8px 16px 0',
   },
   quickActionsHeader: {
@@ -462,14 +264,14 @@ const styles = {
   quickActionsTitle: {
     margin: 0,
     fontWeight: '600',
-    color: '#0077b6',
+    color: theme.colors.primary,
   },
   clearButton: {
-    backgroundColor: '#f94144',
-    color: '#fff',
+    backgroundColor: theme.colors.danger,
+    color: theme.colors.white,
     border: 'none',
     padding: '6px 12px',
-    borderRadius: '8px',
+    borderRadius: theme.radius.sm,
     fontWeight: '600',
     cursor: 'pointer',
     display: 'flex',
@@ -483,11 +285,11 @@ const styles = {
   },
   quickActionButton: {
     flex: '1 1 150px',
-    backgroundColor: '#0077b6',
-    color: '#fff',
+    backgroundColor: theme.colors.primary,
+    color: theme.colors.white,
     border: 'none',
     padding: '10px',
-    borderRadius: '12px',
+    borderRadius: theme.radius.md,
     fontWeight: '600',
     cursor: 'pointer',
     transition: 'background-color 0.2s ease',
@@ -497,9 +299,9 @@ const styles = {
     display: 'flex',
     gap: '8px',
     padding: '12px',
-    backgroundColor: '#ffffff',
-    borderRadius: '12px',
-    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.1)',
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.radius.md,
+    boxShadow: theme.shadow.panel,
   },
   inputContainerActive: {
     backgroundColor: '#cce7ff',
@@ -508,17 +310,17 @@ const styles = {
     flex: 1,
     padding: '14px 18px',
     borderRadius: '30px',
-    border: '1px solid #ccc',
+    border: `1px solid ${theme.colors.border}`,
     fontSize: '1rem',
     outline: 'none',
   },
   sendButton: {
-    backgroundColor: '#0077b6',
+    backgroundColor: theme.colors.primary,
     border: 'none',
     borderRadius: '50%',
     width: '48px',
     height: '48px',
-    color: '#fff',
+    color: theme.colors.white,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
@@ -526,7 +328,7 @@ const styles = {
     transition: 'background-color 0.2s ease',
   },
   sendButtonLoading: {
-    backgroundColor: '#023e8a',
+    backgroundColor: theme.colors.primaryDark,
     cursor: 'not-allowed',
   }
 };
