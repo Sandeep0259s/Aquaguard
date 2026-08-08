@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FiDroplet } from "react-icons/fi";
+import { FiDroplet, FiTrendingUp, FiGlobe } from "react-icons/fi";
 import { auth, googleProvider } from "../config/firebase";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, signOut } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signInWithPopup, sendPasswordResetEmail } from "firebase/auth";
 import theme from "../theme";
+import { useAuth } from "../context/AuthContext";
 
 export const Auth = () => {
     const [email, setEmail] = useState("");
@@ -12,6 +13,11 @@ export const Auth = () => {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const navigate = useNavigate();
+    const { user, initializing } = useAuth();
+
+    useEffect(() => {
+        if (!initializing && user) navigate('/chat', { replace: true });
+    }, [initializing, user, navigate]);
 
     const clearMessages = () => {
         setError("");
@@ -48,11 +54,15 @@ export const Auth = () => {
         }
     };
 
-    const signout = async () => {
+    const handleForgotPassword = async () => {
         clearMessages();
+        if (!email) {
+            setError("Enter your email above first, then click \"Forgot password?\".");
+            return;
+        }
         try {
-            await signOut(auth);
-            setSuccess("Signed out successfully!");
+            await sendPasswordResetEmail(auth, email);
+            setSuccess(`Password reset email sent to ${email}. Check your inbox.`);
         } catch (e) {
             setError(e.message);
             console.error(e);
@@ -61,13 +71,101 @@ export const Auth = () => {
 
     // Inline CSS styles (shared ocean palette — matches Chat/Tips/Usage)
     const styles = {
-        container: {
+        page: {
             minHeight: "100vh",
+            display: "flex",
+            fontFamily: theme.fontFamily,
+            backgroundColor: theme.colors.bgTint,
+        },
+        hero: {
+            flex: "1 1 50%",
+            position: "relative",
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            padding: "4rem",
+            background: theme.gradient.ocean,
+            color: theme.colors.white,
+            overflow: "hidden",
+        },
+        heroGlow: {
+            position: "absolute",
+            top: "-120px",
+            right: "-120px",
+            width: "360px",
+            height: "360px",
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.08)",
+        },
+        heroGlow2: {
+            position: "absolute",
+            bottom: "-140px",
+            left: "-80px",
+            width: "300px",
+            height: "300px",
+            borderRadius: "50%",
+            background: "rgba(255,255,255,0.06)",
+        },
+        heroBrand: {
+            display: "flex",
+            alignItems: "center",
+            gap: "0.6rem",
+            marginBottom: "2.5rem",
+            position: "relative",
+            zIndex: 1,
+        },
+        heroBrandText: {
+            fontFamily: theme.fontHeading,
+            fontSize: "1.5rem",
+            fontWeight: "700",
+        },
+        heroTitle: {
+            fontFamily: theme.fontHeading,
+            fontSize: "2.6rem",
+            fontWeight: "700",
+            lineHeight: 1.15,
+            marginBottom: "1.25rem",
+            position: "relative",
+            zIndex: 1,
+            maxWidth: "26rem",
+        },
+        heroSubtitle: {
+            fontSize: "1.05rem",
+            color: "rgba(255,255,255,0.85)",
+            marginBottom: "2.5rem",
+            maxWidth: "26rem",
+            position: "relative",
+            zIndex: 1,
+        },
+        heroFeatures: {
+            display: "flex",
+            flexDirection: "column",
+            gap: "1rem",
+            position: "relative",
+            zIndex: 1,
+        },
+        heroFeature: {
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            fontSize: "0.95rem",
+        },
+        heroFeatureIcon: {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            fontFamily: theme.fontFamily,
-            background: `linear-gradient(135deg, ${theme.colors.bgTint} 0%, ${theme.colors.accentPale} 100%)`
+            width: "32px",
+            height: "32px",
+            borderRadius: "50%",
+            backgroundColor: "rgba(255,255,255,0.15)",
+            flexShrink: 0,
+        },
+        formSide: {
+            flex: "1 1 50%",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "2rem",
         },
         brand: {
             display: "flex",
@@ -80,21 +178,23 @@ export const Auth = () => {
             color: theme.colors.primary
         },
         brandText: {
+            fontFamily: theme.fontHeading,
             fontSize: "1.5rem",
             fontWeight: "700",
             color: theme.colors.primary
         },
         authBox: {
             backgroundColor: theme.colors.white,
-            padding: "2rem",
-            borderRadius: theme.radius.lg,
-            boxShadow: theme.shadow.panel,
+            padding: "2.5rem",
+            borderRadius: theme.radius.xl,
+            boxShadow: theme.shadow.glass,
             width: "100%",
-            maxWidth: "28rem"
+            maxWidth: "26rem"
         },
         title: {
+            fontFamily: theme.fontHeading,
             fontSize: "1.875rem",
-            fontWeight: "bold",
+            fontWeight: "700",
             textAlign: "center",
             color: theme.colors.textDark,
             marginBottom: "1.5rem"
@@ -126,6 +226,19 @@ export const Auth = () => {
             fontWeight: "500",
             color: theme.colors.textMuted,
             marginBottom: "0.25rem"
+        },
+        passwordLabelRow: {
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+        },
+        forgotLink: {
+            fontSize: "0.8rem",
+            color: theme.colors.primary,
+            border: "none",
+            background: "transparent",
+            cursor: "pointer",
+            padding: 0,
         },
         input: {
             width: "100%",
@@ -171,20 +284,40 @@ export const Auth = () => {
             border: "none",
             backgroundColor: "transparent",
             cursor: "pointer"
-        },
-        signOutButton: {
-            width: "100%",
-            marginTop: "1rem",
-            fontSize: "0.875rem",
-            color: theme.colors.textMuted,
-            border: "none",
-            backgroundColor: "transparent",
-            cursor: "pointer"
         }
     };
 
+    const features = [
+        { icon: <FiDroplet size={16} />, text: "AI chat assistant with saved conversation history" },
+        { icon: <FiTrendingUp size={16} />, text: "Footprint quiz, leak calculator & global scarcity data" },
+        { icon: <FiGlobe size={16} />, text: "Multilingual — ask in your own language" },
+    ];
+
     return (
-        <div style={styles.container}>
+        <div style={styles.page}>
+            <div style={styles.hero} className="auth-hero">
+                <div style={styles.heroGlow} className="float" />
+                <div style={styles.heroGlow2} />
+                <div style={styles.heroBrand}>
+                    <FiDroplet size={30} />
+                    <span style={styles.heroBrandText}>AquaGuard</span>
+                </div>
+                <h1 style={styles.heroTitle}>Every drop counts. Start with yours.</h1>
+                <p style={styles.heroSubtitle}>
+                    Your AI-powered companion for smarter water conservation — chat for
+                    advice, measure your footprint, and see the global picture.
+                </p>
+                <div style={styles.heroFeatures}>
+                    {features.map((f, i) => (
+                        <div key={i} style={styles.heroFeature}>
+                            <span style={styles.heroFeatureIcon}>{f.icon}</span>
+                            {f.text}
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div style={styles.formSide}>
             <div style={styles.authBox}>
                 <div style={styles.brand}>
                     <FiDroplet size={28} style={styles.brandIcon} />
@@ -222,9 +355,20 @@ export const Auth = () => {
                     </div>
                     
                     <div>
-                        <label htmlFor="password" style={styles.label}>
-                            Password
-                        </label>
+                        <div style={styles.passwordLabelRow}>
+                            <label htmlFor="password" style={styles.label}>
+                                Password
+                            </label>
+                            {isLogin && (
+                                <button
+                                    type="button"
+                                    onClick={handleForgotPassword}
+                                    style={styles.forgotLink}
+                                >
+                                    Forgot password?
+                                </button>
+                            )}
+                        </div>
                         <input
                             id="password"
                             type="password"
@@ -234,7 +378,7 @@ export const Auth = () => {
                             style={styles.input}
                         />
                     </div>
-                    
+
                     <button
                         onClick={handleAuth}
                         style={styles.primaryButton}
@@ -259,29 +403,19 @@ export const Auth = () => {
                         {isLogin ? "Sign in with Google" : "Sign up with Google"}
                     </button>
                     
-                    {auth.currentUser ? (
+                    <p style={styles.toggleText}>
+                        {isLogin ? "Don't have an account? " : "Already have an account? "}
                         <button
-                            onClick={signout}
-                            style={styles.signOutButton}
-                            onMouseOver={(e) => e.currentTarget.style.color = theme.colors.textDark}
-                            onMouseOut={(e) => e.currentTarget.style.color = theme.colors.textMuted}
+                            onClick={() => setIsLogin(!isLogin)}
+                            style={styles.toggleButton}
+                            onMouseOver={(e) => e.currentTarget.style.color = theme.colors.primaryDark}
+                            onMouseOut={(e) => e.currentTarget.style.color = theme.colors.primary}
                         >
-                            Sign Out
+                            {isLogin ? "Sign up" : "Sign in"}
                         </button>
-                    ) : (
-                        <p style={styles.toggleText}>
-                            {isLogin ? "Don't have an account? " : "Already have an account? "}
-                            <button
-                                onClick={() => setIsLogin(!isLogin)}
-                                style={styles.toggleButton}
-                                onMouseOver={(e) => e.currentTarget.style.color = theme.colors.primaryDark}
-                                onMouseOut={(e) => e.currentTarget.style.color = theme.colors.primary}
-                            >
-                                {isLogin ? "Sign up" : "Sign in"}
-                            </button>
-                        </p>
-                    )}
+                    </p>
                 </div>
+            </div>
             </div>
         </div>
     );

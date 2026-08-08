@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FiDroplet, FiHome, FiClock, FiBarChart2,
+  FiDroplet, FiMessageCircle, FiHelpCircle, FiDollarSign, FiGlobe, FiAward,
   FiUser, FiChevronDown, FiLogOut
 } from 'react-icons/fi';
 import { auth } from '../config/firebase';
@@ -9,9 +9,11 @@ import { signOut } from 'firebase/auth';
 import theme from '../theme';
 
 const TABS = [
-  { key: 'chat', label: 'Chat', path: '/chat', icon: FiHome },
-  { key: 'tips', label: 'Tips', path: '/tips', icon: FiClock },
-  { key: 'usage', label: 'Usage', path: '/usage', icon: FiBarChart2 },
+  { key: 'chat', label: 'Chat', path: '/chat', icon: FiMessageCircle },
+  { key: 'quiz', label: 'Quiz', path: '/quiz', icon: FiHelpCircle },
+  { key: 'calculator', label: 'Calculator', path: '/calculator', icon: FiDollarSign },
+  { key: 'dashboard', label: 'Dashboard', path: '/dashboard', icon: FiGlobe },
+  { key: 'leaderboard', label: 'Leaderboard', path: '/leaderboard', icon: FiAward },
 ];
 
 const Navbar = ({ active, user }) => {
@@ -41,7 +43,7 @@ const Navbar = ({ active, user }) => {
 
   return (
     <div style={styles.navBar}>
-      <div style={styles.logoContainer} onClick={() => navigate('/chat')}>
+      <div style={styles.logoContainer} className="lift-hover" onClick={() => navigate('/chat')}>
         <FiDroplet size={28} style={styles.logoIcon} />
         <h1 style={styles.logoText}>AquaGuard</h1>
       </div>
@@ -108,28 +110,30 @@ const styles = {
     alignItems: 'center',
     padding: '0 24px',
     height: '72px',
-    backgroundColor: theme.colors.primary,
+    background: theme.gradient.ocean,
+    backdropFilter: 'blur(10px)',
     boxShadow: theme.shadow.nav,
     position: 'relative',
     zIndex: 10,
   },
   logoContainer: { display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' },
   logoIcon: { color: theme.colors.white, flexShrink: 0 },
-  logoText: { fontSize: '1.5rem', fontWeight: '600', color: theme.colors.white, margin: 0 },
-  navTabs: { display: 'flex', gap: '8px', flex: 1, justifyContent: 'center', maxWidth: '500px' },
+  logoText: { fontFamily: theme.fontHeading, fontSize: '1.5rem', fontWeight: '700', color: theme.colors.white, margin: 0 },
+  navTabs: { display: 'flex', gap: '4px', flex: 1, justifyContent: 'center', maxWidth: '680px', flexWrap: 'wrap' },
   navTab: {
     background: 'transparent',
     border: 'none',
     color: theme.colors.white,
-    fontSize: '0.95rem',
+    fontSize: '0.88rem',
     fontWeight: '500',
     cursor: 'pointer',
-    padding: '10px 20px',
+    padding: '9px 13px',
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
+    gap: '5px',
     borderRadius: theme.radius.sm,
     transition: 'background-color 0.2s ease',
+    whiteSpace: 'nowrap',
   },
   activeTab: { backgroundColor: theme.colors.white, color: '#000', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' },
   profileContainer: { position: 'relative' },
